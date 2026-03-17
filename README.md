@@ -6,7 +6,7 @@
 
 ## 🌟 주요 기능 (Key Features)
 
-* **A* 기반 전역 경로 계획 (Global Path Planning)**: 사전에 정의된 노드(Map Database)와 간선(Edge)을 바탕으로 목표 지점까지의 최단 경로를 실시간으로 계산합니다.
+* **A 스타 알고리즘* 기반 전역 경로 계획 (Global Path Planning)**: 사전에 정의된 노드(Map Database)와 간선(Edge)을 바탕으로 목표 지점까지의 최단 경로를 실시간으로 계산합니다.
 * **비전 기반 차선 유지 보조 (Vision-based Lane Keeping)**: HSV 색상 필터링과 관심 영역(ROI) 설정을 통해 차선(파란색 선)을 인식하고, 이미지 모멘트를 활용하여 조향 오차를 보정합니다.
 * **듀얼 네비게이션 모드 (Dual Navigation Mode)**:
   * `VISION Mode`: 장거리 직진 도로에서 카메라 데이터를 기반으로 차선을 따라 주행합니다.
