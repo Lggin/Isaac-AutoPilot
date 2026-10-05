@@ -1,121 +1,115 @@
-# 🚗 ROS 2 & Isaac Sim Autonomous Navigation Project
+# ROS 2 & Isaac Sim Autonomous Navigation
 
-본 프로젝트는 **NVIDIA Isaac Sim**과 **ROS 2 (Humble)** 를 연동하여, 가상 환경 내에서 Ackermann 조향 차량의 자율주행을 구현한 시스템입니다. A* 알고리즘을 활용한 전역 경로 계획과 OpenCV 기반의 차선 인식(Vision) 알고리즘을 결합하여 교차로와 직진 구간을 자율적으로 주행합니다.
+> **NVIDIA Isaac Sim + ROS 2 + Computer Vision** 기반 Ackermann 차량 자율주행 디지털 트윈 프로젝트
 
----
+## Overview
 
-## 🌟 주요 기능 (Key Features)
+NVIDIA Isaac Sim의 가상 환경과 ROS 2 Humble을 연동해 Ackermann 조향 차량의 자율주행 시스템을 구현했습니다.
 
-* **A 스타 알고리즘* 기반 전역 경로 계획 (Global Path Planning)**: 사전에 정의된 노드(Map Database)와 간선(Edge)을 바탕으로 목표 지점까지의 최단 경로를 실시간으로 계산합니다.
-* **비전 기반 차선 유지 보조 (Vision-based Lane Keeping)**: HSV 색상 필터링과 관심 영역(ROI) 설정을 통해 차선(파란색 선)을 인식하고, 이미지 모멘트를 활용하여 조향 오차를 보정합니다.
-* **듀얼 네비게이션 모드 (Dual Navigation Mode)**:
-  * `VISION Mode`: 장거리 직진 도로에서 카메라 데이터를 기반으로 차선을 따라 주행합니다.
-  * `BLIND Mode`: 교차로 통과 및 회전 시, 목표 노드와의 각도(Yaw) 및 오도메트리(Odometry)를 계산하여 하드코딩된 조향각으로 안전하게 회전합니다.
-* **실시간 2D 맵 UI (Real-Time 2D Map UI)**: `matplotlib` 및 `networkx`를 활용하여 현재 차량의 위치와 A* 알고리즘으로 생성된 경로를 별도의 창에 실시간으로 시각화합니다.
-* **Isaac Sim & ROS 2 Bridge**: 고품질 물리 엔진인 Isaac Sim 환경에서 카메라 영상(`/camera_left/image_raw`)과 오도메트리(`/odom`)를 받아, 차량 제어 명령(`/ackermann_cmd`)을 퍼블리시합니다.
+전역 경로는 **A\*** 알고리즘으로 계산하고, 직진 구간에서는 OpenCV 기반 차선 인식, 교차로·회전 구간에서는 Odometry와 Yaw를 이용하는 하이브리드 주행 구조를 적용했습니다.
 
 ---
 
-## 🏗️ 시스템 설계 (System Architecture)
+## System Architecture
 
-* **Simulator (NVIDIA Isaac Sim)**
-  * `map_car.py` 스크립트를 통해 `map.usd`와 `ackermann_car_fixed_cam.usd`를 로드합니다.
-  * **Sensors**: Camera (RGB), Odometry
-  * **Actuators**: Ackermann Steering Controller
-* **ROS 2 Node (`autonomous_nav_node`)**
-  * **Subscribers**: 
-    * `/camera_left/image_raw` (sensor_msgs/Image) - 차선 인식용
-    * `/odom` (nav_msgs/Odometry) - 차량 위치 및 자세 추정용
-    * `/set_goal` (std_msgs/String) - 목적지 수신용
-  * **Publishers**:
-    * `/ackermann_cmd` (ackermann_msgs/AckermannDriveStamped) - 차량 조향 및 속도 제어
-    * `/camera_left/lane_overlay` (sensor_msgs/Image) - 디버깅용 차선 인식 결과 이미지
-
----
-
-## 🔄 알고리즘 플로우 차트 (Logic Flow)
-
-1. **목적지 입력**: GUI Prompt 또는 `/set_goal` 토픽을 통해 목적지 문자열 수신.
-2. **경로 탐색**: A* 알고리즘으로 `start` -> `goal` 까지의 노드 리스트 생성.
-3. **주행 루프 시작 (0.05초 주기)**:
-   * **현재 구간 판별**: 현재 노드와 다음 노드가 '교차로(Intersection)'나 '센터(Center)'인지 판별.
-   * **모드 분기**:
-     * **[VISION 모드]**: 직진 구간. OpenCV로 차선의 중심점을 찾아 `lane_offset` 계산 -> 오차에 따라 PID(P제어 기반) 조향 및 속도 조절.
-     * **[BLIND 모드]**: 교차로/회전 구간. 현재 Yaw 값과 목표 노드의 각도를 비교하여 Type 1/2/3의 고정 조향각(`fixed_turn_steer`) 적용.
-4. **노드 도달 확인**: `/odom` 기반 현재 좌표와 목표 노드 간의 거리가 허용 오차(`tolerance`) 이내인지 확인.
-5. **업데이트**: 다음 노드로 타겟 변경 및 3번으로 회귀 (최종 목적지 도착 시 주행 종료).
+```text
+Isaac Sim
+ ├─ RGB Camera ───────────────┐
+ └─ Odometry ───────────────┐ │
+                            ↓ ↓
+                      ROS 2 Bridge
+                            ↓
+                 autonomous_nav_node
+                 ├─ A* Global Planner
+                 ├─ Vision Lane Tracking
+                 ├─ Odom / Yaw Navigation
+                 └─ Driving State Logic
+                            ↓
+                  /ackermann_cmd
+                            ↓
+                  Ackermann Vehicle
+```
 
 ---
 
-## 📂 디렉토리 구조 (Directory Structure)
+## Key Features
 
-    src/project/
-    ├── project/
-    │   ├── line_detecing.py      # ROS 2 자율주행 알고리즘 노드
-    │   └── map_car.py            # Isaac Sim 맵 및 차량 로드 스크립트
-    └── resource/                 # 3D 모델 및 에셋 디렉토리
-        ├── map.usd
-        ├── ackermann_car_fixed_cam.usd
-        └── assets/
+### 1. A* Global Path Planning
+
+사전에 정의한 Map Graph의 node와 edge를 기반으로 현재 위치에서 목적지까지 최단 경로를 계산합니다.
+
+### 2. Vision-based Lane Tracking
+
+직진 구간에서는 카메라 영상을 받아 다음 과정을 수행합니다.
+
+- HSV 기반 차선 색상 분리
+- ROI 설정
+- Image Moment로 차선 중심 계산
+- 차량 중심과 차선 중심의 오차를 이용해 조향량 계산
+
+### 3. Dual Navigation Mode
+
+주행 구간의 성격에 따라 제어 방식을 분리했습니다.
+
+- **VISION mode**: 카메라 기반 차선 추종
+- **BLIND mode**: 교차로·회전 구간에서 Odometry/Yaw와 목표 방향 기반 조향
+
+센서 하나에 모든 상황을 의존하지 않고, 구간 특성에 따라 적절한 정보를 사용하도록 상태 기반 주행 로직을 구성했습니다.
+
+### 4. ROS 2 Interface
+
+**Subscribers**
+- `/camera_left/image_raw`
+- `/odom`
+- `/set_goal`
+
+**Publishers**
+- `/ackermann_cmd`
+- `/camera_left/lane_overlay`
+
+### 5. Real-time Route Visualization
+
+`networkx`와 `matplotlib`을 사용해 현재 차량 위치와 A* 경로를 2D UI에 표시했습니다.
+
+UI 갱신과 ROS 2 제어 루프가 서로 블로킹하지 않도록 실행 흐름을 분리해, 시각화가 주행 제어 주기를 방해하지 않도록 구성했습니다.
 
 ---
 
-## 💻 개발 환경 (Environment)
+## My Contribution
 
-* **OS**: Ubuntu 22.04 LTS
-* **Middleware**: ROS 2 Humble
-* **Simulator**: NVIDIA Isaac Sim
-* **Language**: Python 3.10+
-
----
-
-## 🛠️ 사용 장비 (Hardware Setup)
-
-* **CPU**: (사용하신 CPU 모델명 입력, 예: Intel Core i7)
-* **GPU**: NVIDIA RTX 시리즈 (Isaac Sim 구동을 위해 필수)
-* **RAM**: 32GB 이상 권장
+- Isaac Sim ↔ ROS 2 Bridge 연동
+- A* 기반 전역 경로 탐색 로직 구현
+- OpenCV 기반 차선 인식 및 조향 오차 계산
+- Odometry / Yaw 기반 교차로 주행 로직 구현
+- VISION / BLIND 상태 전환 구조 설계
+- 실시간 2D 경로 UI 구성 및 제어 루프와 실행 분리
+- 전체 자율주행 흐름 통합 및 디버깅
 
 ---
 
-## 📦 의존성 설치 (Installation)
+## Tech Stack
 
-ROS 2 Humble 및 Isaac Sim이 설치되어 있어야 하며, 추가적인 Python 패키지 설치가 필요합니다.
-
-    # 필요한 Python 패키지 설치
-    pip3 install numpy opencv-python matplotlib networkx
+`Ubuntu 22.04` `ROS 2 Humble` `NVIDIA Isaac Sim` `Python` `OpenCV` `NetworkX` `Matplotlib`
 
 ---
 
-## 🚀 실행 순서 (How to Run)
+## Project Structure
 
-시스템은 원활한 연동을 위해 두 개의 터미널을 분리하여 실행합니다.
+```text
+src/project/
+├── project/
+│   ├── line_detecing.py   # ROS 2 autonomous navigation node
+│   └── map_car.py         # Isaac Sim map / vehicle loader
+└── resource/
+    ├── map.usd
+    ├── ackermann_car_fixed_cam.usd
+    └── assets/
+```
 
-### 1. 시뮬레이터 환경 실행 (Terminal 1)
+---
 
-Isaac Sim을 구동하고 맵과 차량을 스폰합니다. ROS 2 Bridge 익스텐션이 포함되어 있습니다.
+## What I Learned
 
-    # ROS 2 및 Isaac Sim 환경 변수 설정
-    export ROS_DISTRO=humble
-    export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/rokey/isaacsim/exts/isaacsim.ros2.bridge/humble/lib
+이 프로젝트를 통해 자율주행 시스템은 단일 알고리즘만으로 완성되지 않고, **경로계획·비전·위치추정·상태전이·실시간 제어**를 하나의 데이터 흐름으로 연결해야 한다는 점을 경험했습니다.
 
-    # Isaac Sim 파이썬 스크립트 실행
-    /home/rokey/isaacsim/python.sh /home/rokey/IsaacSim-ros_workspaces/humble_ws/src/project/project/map_car.py
-
-*(기다리면 Isaac Sim 창이 열리고 맵과 차량이 로드됩니다.)*
-
-### 2. 자율주행 알고리즘 노드 실행 (Terminal 2)
-
-시뮬레이터가 완전히 로드된 후, 자율주행 노드를 실행합니다.
-
-    # ROS 2 워크스페이스 환경 설정
-    source /opt/ros/humble/setup.bash
-
-    # 스크립트가 있는 디렉토리로 이동
-    cd /home/rokey/IsaacSim-ros_workspaces/humble_ws/src/project/project
-
-    # 자율주행 노드 실행
-    python3 line_detecing.py
-
-* **실행 시 참고사항**: 실행 시 목적지 입력을 묻는 작은 GUI 창이 뜹니다. (예: `fire_station`, `home`, `opistel` 등)
-* 입력 후 확인을 누르면 차량이 자율주행을 시작하며, 2D 맵 UI 창을 통해 실시간 위치 및 경로를 확인할 수 있습니다.
+또한 시뮬레이션 환경에서도 ROS 2 토픽 주기와 UI 처리처럼 실제 시스템과 유사한 병목이 발생할 수 있어, 기능 구현뿐 아니라 실행 구조를 함께 설계해야 함을 배웠습니다.
